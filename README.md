@@ -11,7 +11,8 @@
 
 **ยังไม่เริ่มเขียนโค้ด** — ตอนนี้อยู่ขั้นออกแบบ
 
-ออกแบบทั้งหมดอยู่ที่ [`docs/superpowers/specs/2026-09-10-waen-design.md`](docs/superpowers/specs/2026-09-10-waen-design.md)
+- ออกแบบ: [`docs/superpowers/specs/2026-09-10-waen-design.md`](docs/superpowers/specs/2026-09-10-waen-design.md)
+- แผนลงมือ: [`docs/superpowers/plans/2026-09-10-waen.md`](docs/superpowers/plans/2026-09-10-waen.md) — 30 task, 5 phase
 
 ขั้นถัดไปคือ Phase 0: พิสูจน์ว่า OCR อ่านฟอนต์ Persona 5 ได้จริงหรือไม่
 **ต้องทำบนเครื่อง Windows** ถ้าไม่ผ่านเกณฑ์ ต้องกลับมาทบทวนแนวทางก่อนไปต่อ
