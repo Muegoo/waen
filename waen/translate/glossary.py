@@ -10,7 +10,8 @@ from typing import Mapping, Sequence
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TEMPLATES: tuple[str, ...] = ("[[{i}]]", "@@{i}@@", "#{i}#", "{{{i}}}")
+# ลำดับตามผลวัดจริง docs/phase2-placeholder-notes.md (2026-09-12): @@{i}@@ รอด 100%
+DEFAULT_TEMPLATES: tuple[str, ...] = ("@@{i}@@", "#{i}#", "[[{i}]]", "{{{i}}}")
 
 
 def _pattern_for(template: str) -> re.Pattern[str]:

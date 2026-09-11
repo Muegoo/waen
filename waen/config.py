@@ -76,7 +76,7 @@ class AppConfig:
     grouping: GroupingConfig = field(default_factory=GroupingConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     glossary_path: str = "glossary/persona5.json"
-    placeholder_template: str = "[[{i}]]"
+    placeholder_template: str = "@@{i}@@"  # ผลวัด docs/phase2-placeholder-notes.md
     hotkeys: dict[str, str] = field(default_factory=_default_hotkeys)
 
     def region_box(self) -> Box | None:
