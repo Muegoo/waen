@@ -10,3 +10,8 @@ dist/
 debug_dump/
 config.local.json
 .pytest-tmp/
+
+# Phase 6 — คลังบทพูดเป็นลิขสิทธิ์ของผู้พัฒนาเกม ห้าม commit
+corpus/*.jsonl
+corpus/*.sqlite
+corpus/*.checkpoint.json
