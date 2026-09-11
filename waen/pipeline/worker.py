@@ -10,7 +10,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from ..capture.factory import create_backend
 from ..geometry import Box
-from .core import PipelineCore
+from .core import PipelineCore, apply_masks
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +85,9 @@ class PipelineWorker(QThread):
 
                 now_ms = int(time.monotonic() * 1000)
                 try:
+                    masked = apply_masks(frame, self._region, self._masks)
                     blocks = self._core.detect(
-                        frame, origin=(self._region.x, self._region.y), now_ms=now_ms
+                        masked, origin=(self._region.x, self._region.y), now_ms=now_ms
                     )
                 except Exception as exc:
                     logger.exception("OCR failed")
