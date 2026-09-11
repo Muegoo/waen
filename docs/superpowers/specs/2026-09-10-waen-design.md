@@ -169,7 +169,7 @@ waen/
 ├─ translate/
 │  ├─ base.py             Translator (Protocol)
 │  ├─ google.py           deep-translator + cache + rate limit + batching
-│  ├─ lookup.py           (v1.5) ค้นคลังแปลล่วงหน้า → fallback google  (หัวข้อ 16)
+│  ├─ lookup.py           (v1.5) CorpusLookup ค้นคลังแปลล่วงหน้า  (หัวข้อ 16.4)
 │  └─ glossary.py         protect/restore ศัพท์เฉพาะ
 ├─ platform/
 │  ├─ base.py             PlatformIntegration (Protocol)
@@ -310,7 +310,7 @@ class Translator(Protocol):
 ```
 
 v1 มี implementation เดียว: `GoogleTranslator` (ผ่าน `deep-translator`, endpoint ฟรี ไม่ต้องมี key)
-v1.5 เพิ่ม `LookupTranslator` ที่ห่อ `GoogleTranslator` ไว้เป็น fallback (หัวข้อ 16.4)
+v1.5 เพิ่ม `CorpusLookup` ที่ `PipelineCore.translate` ถามก่อนเข้าเส้นทาง glossary → Google (หัวข้อ 16.4)
 `None` = แปลไม่สำเร็จ ผู้เรียกต้องแสดงสถานะและไม่ล้ม
 
 ### 7.2 cache, rate limit, batching
@@ -587,8 +587,8 @@ Google ฟรีแปลทีละบรรทัดโดยไม่รู�
           ─▶ translate แบบมี context ─▶ corpus/<game>.sqlite
 
 [runtime — ตอนเล่น]
- OCR text ─▶ normalize ─▶ LookupTranslator ─┬─ hit  ─▶ คำแปลจากคลัง (ไม่แตะเน็ต)
-                                             └─ miss ─▶ GoogleTranslator (เดิม)
+ OCR text ─▶ normalize ─▶ CorpusLookup ─┬─ hit  ─▶ คำแปลจากคลัง (ไม่แตะเน็ต, ข้าม glossary)
+                                         └─ miss ─▶ glossary → GoogleTranslator (เดิม)
 ```
 
 สิ่งที่ได้นอกจากคุณภาพ:
@@ -614,7 +614,7 @@ waen/corpus/
 ├─ archives/              ชั้น 1: แกะไฟล์บรรจุ
 │  ├─ base.py             ArchiveReader (Protocol): list() / read(name) -> bytes
 │  ├─ plain_dir.py        โฟลเดอร์ธรรมดา
-│  └─ cpk.py              CRI CPK (P5R, เกม Atlus/Sega อื่นๆ)
+│  └─ cpk.py              CRI CPK — ยังไม่ทำใน Phase 6 (P5R ต้องแกะ CPK ด้วยเครื่องมือภายนอกอยู่แล้วเพื่อ decompile .bmd)
 ├─ formats/               ชั้น 2: ถอดรหัสไฟล์ข้อความ
 │  ├─ base.py             TextFormat (Protocol): decode(bytes, name) -> Iterator[RawMessage]
 │  ├─ plaintext.py        .txt / .csv / .json / .jsonl — ตัวหารร่วมน้อยที่สุด
@@ -686,15 +686,22 @@ class GameAdapter(Protocol):
   ถูกขัดจังหวะแน่นอน
 - ตรวจจำนวนบรรทัดกลับต้องเท่าที่ส่ง (กฎเดียวกับ 7.2) ไม่เท่า → แปล scene นั้นทีละ entry
 
-### 16.4 `LookupTranslator` — ฝั่ง runtime
+### 16.4 `CorpusLookup` — ฝั่ง runtime
 
-`translate/lookup.py` implement `Translator` Protocol เดิม → เสียบแทน `GoogleTranslator`
-ได้โดย pipeline ไม่รู้ตัว
+`translate/lookup.py` **ไม่ใช่** `Translator` — เพราะ `translate_with_glossary` แทนศัพท์ด้วย
+placeholder ก่อนส่งให้ translator ถ้าคลังอยู่หลังจุดนั้นจะไม่มีวัน match คลังจึงต้องเห็น
+ข้อความดิบ: `PipelineCore.translate` ถาม `CorpusLookup` ก่อน hit → ตอบเลย, miss → เส้นทางเดิม
+ทั้งหมด (glossary → Google) โดย pipeline ส่วนอื่นไม่รู้ตัว
 
 ```python
-class LookupTranslator:
-    def __init__(self, corpus_path: Path, fallback: Translator, threshold: int = 85): ...
-    def translate_many(self, texts: list[str]) -> list[str | None]: ...
+@dataclass(frozen=True)
+class LookupHit:
+    entry_id: str; source: str; translated: str; score: int
+
+class CorpusLookup:
+    def __init__(self, db_path: Path, threshold: int = 85, candidates: int = 20): ...
+    def lookup(self, text: str) -> LookupHit | None: ...   # thread-safe
+    def stats(self) -> dict: ...                              # hits / misses สำหรับแถบสถานะ
 ```
 
 ขั้นตอนต่อข้อความ:
@@ -702,13 +709,16 @@ class LookupTranslator:
 1. `normalize(text)` — ฟังก์ชันเดียวกับตอน build (lowercase, รวมบรรทัด, unify quote/dash,
    ตัดเครื่องหมายวรรคตอน, ยุบช่องว่าง)
 2. ดึงผู้สมัคร top-20 จาก SQLite **FTS5 trigram** (มีใน sqlite ที่มากับ Python 3.11 บน
-   Windows แล้ว ไม่ต้องสร้าง index เอง)
-3. ให้คะแนนด้วย `rapidfuzz.fuzz.ratio` กับ `text` ที่ normalize แล้ว
+   Windows แล้ว ไม่ต้องสร้าง index เอง) โดย OR คำที่ยาว ≥ 3 ตัวอักษร — คำที่ OCR อ่านเพี้ยน
+   บางคำจึงไม่ทำให้ผู้สมัครหาย
+3. ให้คะแนนด้วย `rapidfuzz.fuzz.ratio` กับ `text_norm` ของผู้สมัคร
 4. คะแนนสูงสุด `>= threshold` → คืนคำแปลจากคลัง **ข้าม glossary** (คลังสอดคล้องอยู่แล้ว)
-5. ไม่ถึง → ส่ง `fallback.translate_many([text])` ผ่าน glossary ตามเส้นทางเดิม
+5. ไม่ถึง → `translate_with_glossary(...)` ตามเส้นทางเดิม
 
-เส้นทาง hit ไม่แตะเน็ต จึงเรียกจาก `PipelineWorker` ได้โดยตรง แต่เพื่อไม่ให้มีสองเส้นทาง
-ให้ทั้ง hit และ miss ผ่าน `ThreadPoolExecutor` เดิมเหมือนกัน (hit จะกลับมาในหลัก ms)
+ไม่มีคลัง / เปิดไม่ได้ → `corpus=None` โปรแกรมทำงานเหมือน v1 ทุกประการ + เตือนครั้งเดียว
+ทั้ง hit และ miss ผ่าน `ThreadPoolExecutor` เดิมเหมือนกันเพื่อไม่ให้มีสองเส้นทาง (hit กลับมาในหลัก ms)
+
+`TranslatedBlock` เพิ่ม `corpus_hit`, `corpus_score`, `corpus_entry_id` (มีค่าเริ่มต้น จุดเรียกเดิมไม่แตก)
 
 **การวัดผล:** `--debug-dump` เพิ่ม `corpus_hit`, `corpus_score`, `corpus_entry_id` ต่อบล็อก
 และ `scripts/corpus_hitrate.py` อ่าน dump ทั้งโฟลเดอร์แล้วรายงาน hit rate — ตัวเลขนี้คือ
