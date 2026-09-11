@@ -8,6 +8,73 @@ import sys
 from .geometry import Box
 
 
+def _run_cli(region_arg: str | None, max_frames: int | None = None) -> int:
+    """Capture, translate, and print text without constructing an overlay UI."""
+    import time
+
+    from .capture.factory import create_backend
+    from .config import load_config
+    from .ocr.factory import create_engine
+    from .pipeline.core import PipelineCore
+    from .platform import get_platform
+    from .translate.glossary import Glossary
+    from .translate.google import GoogleTranslateBackend
+
+    if max_frames is not None and max_frames < 0:
+        print("--max-frames must be zero or greater.")
+        return 2
+
+    get_platform().make_dpi_aware()
+    config = load_config()
+    if region_arg:
+        try:
+            x, y, w, h = (int(part) for part in region_arg.split(","))
+            region = Box(x, y, w, h)
+        except ValueError:
+            print("--region must be x,y,w,h using integer physical pixels.")
+            return 2
+    else:
+        region = config.region_box()
+    if region is None:
+        print("No region selected; run --save-region or pass --region x,y,w,h.")
+        return 1
+
+    ocr = create_engine(config.ocr_engine)
+    core = PipelineCore(
+        ocr=ocr,
+        config=config,
+        glossary=Glossary.from_file(config.glossary_path),
+        translator=GoogleTranslateBackend(config.source_lang, config.target_lang),
+    )
+    backend = create_backend(config.capture_backend)
+    print(
+        f"Watching {region} with capture backend {backend.name} "
+        f"and OCR engine {ocr.name} — Ctrl+C to stop"
+    )
+
+    frames_seen = 0
+    try:
+        while max_frames is None or frames_seen < max_frames:
+            frame = backend.grab(region)
+            if frame is not None:
+                now_ms = int(time.monotonic() * 1000)
+                for block in core.detect(frame, (region.x, region.y), now_ms):
+                    result = core.translate(block)
+                    print(f"\n[{block.kind}] {block.source_text}")
+                    if result is None:
+                        print("  -> translation failed")
+                    else:
+                        flag = "" if result.glossary_applied else "  (glossary not applied)"
+                        print(f"  -> {result.translated}{flag}")
+                frames_seen += 1
+            time.sleep(config.poll_interval_ms / 1000)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    finally:
+        backend.close()
+    return 0
+
+
 def _select_region() -> tuple[Box, float] | None:
     """Show the selector and return its physical-pixel result, if any."""
     from PyQt6.QtGui import QGuiApplication
@@ -98,13 +165,29 @@ def _save_region(output_path: str) -> int:
 
 
 def main() -> int:
+    # คอนโซล Windows เป็น cp1252 โดยปริยาย พิมพ์คำแปลไทยแล้วล้ม จึงบังคับ UTF-8
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(prog="waen", description="On-screen game translator")
     parser.add_argument(
         "--save-region",
         metavar="OUT.PNG",
         help="select a region (or use the saved one) and save one capture as a PNG",
     )
+    parser.add_argument("--cli", action="store_true", help="terminal mode without overlay")
+    parser.add_argument(
+        "--region", help="skip selection: x,y,w,h in physical pixels"
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        help="exit CLI mode after this many non-empty captured frames",
+    )
     args = parser.parse_args()
+
+    if args.cli:
+        return _run_cli(args.region, args.max_frames)
 
     if args.save_region:
         return _save_region(args.save_region)

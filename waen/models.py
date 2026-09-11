@@ -42,3 +42,10 @@ class OverlayItem:
     anchor: Box
     draw: Box
     font_size: int
+
+
+@dataclass(frozen=True)
+class TranslatedBlock:
+    block: TextBlock
+    translated: str
+    glossary_applied: bool
