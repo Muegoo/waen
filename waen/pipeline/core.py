@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Sequence
 
 import numpy as np
 
@@ -20,6 +21,28 @@ logger = logging.getLogger(__name__)
 THAI_FIRST = 0x0E00
 THAI_LAST = 0x0E7F
 MAX_THAI_RATIO = 0.3
+
+
+def apply_masks(
+    frame: np.ndarray, region: Box, masks: Sequence[Box]
+) -> np.ndarray:
+    """Black out active overlay panels before the frame reaches OCR.
+
+    This is the second self-capture guard when Windows capture exclusion is
+    unavailable.  The source frame remains untouched for callers such as a
+    debug dumper that still need the original pixels.
+    """
+    if not masks:
+        return frame
+    result = frame.copy()
+    for mask in masks:
+        overlap = mask.intersection(region)
+        if overlap is None:
+            continue
+        top = overlap.y - region.y
+        left = overlap.x - region.x
+        result[top : top + overlap.h, left : left + overlap.w] = 0
+    return result
 
 
 def thai_ratio(text: str) -> float:

@@ -192,8 +192,18 @@ def main() -> int:
     if args.save_region:
         return _save_region(args.save_region)
 
-    parser.print_help()
-    return 0
+    from .app import main as run_app
+    from .config import load_config
+
+    config = load_config()
+    if args.region:
+        try:
+            x, y, w, h = (int(part) for part in args.region.split(","))
+            config.set_region(Box(x, y, w, h), scale=1.0)
+        except ValueError:
+            print("--region must be x,y,w,h using integer physical pixels.")
+            return 2
+    return run_app(config=config, max_frames=args.max_frames)
 
 
 if __name__ == "__main__":
