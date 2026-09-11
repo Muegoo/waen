@@ -15,3 +15,5 @@ config.local.json
 corpus/*.jsonl
 corpus/*.sqlite
 corpus/*.checkpoint.json
+waen.egg-info/
+.rtk/
