@@ -1,0 +1,18 @@
+{
+  "keep": [
+    "Ryuji", "Ann", "Makoto", "Futaba", "Yusuke", "Haru", "Morgana", "Joker",
+    "Akechi", "Sae", "Sojiro", "Kamoshida", "Madarame", "Kaneshiro",
+    "Mementos", "Shibuya", "Yongen-Jaya", "Leblanc", "Shujin"
+  ],
+  "map": {
+    "Phantom Thieves": "จอมโจรพันหน้า",
+    "Velvet Room": "ห้องกำมะหยี่",
+    "Confidant": "ผู้ร่วมอุดมการณ์",
+    "Persona": "เพอร์โซนา",
+    "Palace": "พาเลซ",
+    "Treasure": "สมบัติ",
+    "Shadow": "เงา",
+    "Calling Card": "บัตรท้าประลอง",
+    "Safe Room": "ห้องปลอดภัย"
+  }
+}
