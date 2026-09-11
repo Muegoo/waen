@@ -15,6 +15,10 @@ class PlatformIntegration(Protocol):
         """Exclude a window from screen capture, if supported."""
         ...
 
+    def apply_overlay_styles(self, win_id: int) -> bool:
+        """Apply styles that make an overlay click-through and non-activating."""
+        ...
+
     def register_global_hotkeys(
         self, qapp, hotkeys: dict[str, str], callback: Callable[[str], None]
     ) -> bool:

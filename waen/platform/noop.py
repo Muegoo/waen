@@ -12,6 +12,9 @@ class NoopPlatform:
     def exclude_from_capture(self, win_id: int) -> bool:
         return False
 
+    def apply_overlay_styles(self, win_id: int) -> bool:
+        return False
+
     def register_global_hotkeys(
         self, qapp, hotkeys: dict[str, str], callback: Callable[[str], None]
     ) -> bool:
