@@ -7,12 +7,20 @@ hotkey registration are intentionally deferred to their dedicated tasks.
 from __future__ import annotations
 
 import ctypes
+import ctypes.wintypes
 import logging
 from typing import Callable
 
 logger = logging.getLogger(__name__)
 
 PROCESS_PER_MONITOR_DPI_AWARE = 2
+
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
+
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+WS_EX_TRANSPARENT = 0x00000020
+WS_EX_NOACTIVATE = 0x08000000
 
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -67,7 +75,37 @@ class Win32Platform:
             logger.warning("Could not set DPI awareness; coordinates may be scaled: %s", exc)
 
     def exclude_from_capture(self, win_id: int) -> bool:
-        return False  # Task 25
+        """Exclude a window from both GDI and DXGI screen capture if supported."""
+        if not win_id:
+            return False
+        try:
+            return bool(
+                ctypes.windll.user32.SetWindowDisplayAffinity(
+                    ctypes.wintypes.HWND(win_id), WDA_EXCLUDEFROMCAPTURE
+                )
+            )
+        except (AttributeError, OSError) as exc:
+            logger.info("SetWindowDisplayAffinity is unavailable: %s", exc)
+            return False
+
+    def apply_overlay_styles(self, win_id: int) -> bool:
+        """Make an overlay layered, click-through, and non-activating."""
+        if not win_id:
+            return False
+        try:
+            user32 = ctypes.windll.user32
+            user32.GetWindowLongPtrW.restype = ctypes.c_longlong
+            user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+            user32.GetWindowLongPtrW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+            user32.SetWindowLongPtrW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int, ctypes.c_longlong]
+            handle = ctypes.wintypes.HWND(win_id)
+            current = user32.GetWindowLongPtrW(handle, GWL_EXSTYLE)
+            wanted = current | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
+            user32.SetWindowLongPtrW(handle, GWL_EXSTYLE, wanted)
+            return bool(user32.GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TRANSPARENT)
+        except (AttributeError, OSError) as exc:
+            logger.info("Could not set overlay window styles: %s", exc)
+            return False
 
     def register_global_hotkeys(
         self, qapp, hotkeys: dict[str, str], callback: Callable[[str], None]
