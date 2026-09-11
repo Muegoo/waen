@@ -7,11 +7,22 @@ import logging
 import sys
 from pathlib import Path
 
+from ..translate.glossary import Glossary
 from .adapters.plaintext import PlaintextAdapter
+from .adapters.persona5r import Persona5RoyalAdapter
+from .build import build_corpus_db
 from .extract import corpus_stats, extract_entries, read_jsonl, write_jsonl
+from .translate import (
+    Checkpoint,
+    LineByLineCorpusTranslator,
+    read_translated_jsonl,
+    translate_corpus,
+    write_translated_jsonl,
+)
 
 ADAPTERS: dict[str, type] = {
     PlaintextAdapter.id: PlaintextAdapter,
+    Persona5RoyalAdapter.id: Persona5RoyalAdapter,
 }
 
 
@@ -47,6 +58,38 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def make_backend(name: str, glossary_path: str) -> LineByLineCorpusTranslator:
+    if name == "google":
+        from ..translate.google import GoogleTranslateBackend
+
+        return LineByLineCorpusTranslator(
+            GoogleTranslateBackend(source="en", target="th"),
+            Glossary.from_file(Path(glossary_path)),
+        )
+    raise SystemExit(f"Unknown backend {name!r}")
+
+
+def cmd_translate(args) -> int:
+    entries = read_jsonl(Path(args.input))
+    stats = corpus_stats(entries)
+    for key in ("entries", "scenes", "chars", "unique_texts"):
+        print(f"{key}: {stats[key]}")
+    if args.dry_run:
+        return 0
+
+    checkpoint = Checkpoint(args.checkpoint or Path(args.out).with_suffix(".checkpoint.json"))
+    translations = translate_corpus(entries, make_backend(args.backend, args.glossary), checkpoint, progress=print)
+    count = write_translated_jsonl(entries, translations, Path(args.out))
+    print(f"Wrote {count}/{len(entries)} entries → {args.out}")
+    return 0
+
+
+def cmd_build(args) -> int:
+    count = build_corpus_db(read_translated_jsonl(Path(args.input)), Path(args.out))
+    print(f"Built corpus with {count} entries → {args.out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m waen.corpus")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -61,6 +104,20 @@ def build_parser() -> argparse.ArgumentParser:
     stats_parser = sub.add_parser("stats", help="Report corpus entry and character counts")
     stats_parser.add_argument("path")
     stats_parser.set_defaults(func=cmd_stats)
+
+    translate_parser = sub.add_parser("translate", help="Translate .src.jsonl into resumable .th.jsonl")
+    translate_parser.add_argument("--in", dest="input", required=True)
+    translate_parser.add_argument("--out", required=True)
+    translate_parser.add_argument("--backend", default="google")
+    translate_parser.add_argument("--glossary", default="glossary/persona5.json")
+    translate_parser.add_argument("--checkpoint", default=None)
+    translate_parser.add_argument("--dry-run", action="store_true", help="Report size without translating")
+    translate_parser.set_defaults(func=cmd_translate)
+
+    build_parser = sub.add_parser("build", help="Build runtime SQLite corpus from .th.jsonl")
+    build_parser.add_argument("--in", dest="input", required=True)
+    build_parser.add_argument("--out", required=True)
+    build_parser.set_defaults(func=cmd_build)
     return parser
 
 
