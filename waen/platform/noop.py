@@ -19,3 +19,6 @@ class NoopPlatform:
         self, qapp, hotkeys: dict[str, str], callback: Callable[[str], None]
     ) -> bool:
         return False
+
+    def unregister_global_hotkeys(self) -> None:
+        return None

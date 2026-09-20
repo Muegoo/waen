@@ -82,6 +82,13 @@ class WaenApp:
             QApplication.quit,
         )
         self.tray.show()
+        self._hotkeys_ok = self.platform.register_global_hotkeys(
+            QApplication.instance(), config.hotkeys, self._on_hotkey
+        )
+        if not self._hotkeys_ok:
+            logger.warning(
+                "Could not register system-wide hotkeys; use the tray menu instead"
+            )
         self._refresh_status()
 
     def start(self) -> None:
@@ -176,11 +183,13 @@ class WaenApp:
         )
 
     def _on_hotkey(self, action: str) -> None:
-        """Dispatch tray actions; Task 28 will connect registered hotkeys here."""
+        """Dispatch global-hotkey and tray actions."""
         if action == "toggle":
             self.stop() if self._worker is not None else self.start()
         elif action == "select_region":
             self.select_region()
+        elif action == "hide":
+            self.toggle_hidden()
 
     def _on_blocks(self, translated) -> None:
         items = layout_blocks(
@@ -215,3 +224,4 @@ def main(config: AppConfig | None = None, max_frames: int | None = None) -> int:
         return app.exec()
     finally:
         waen.stop()
+        waen.platform.unregister_global_hotkeys()

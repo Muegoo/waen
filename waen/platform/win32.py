@@ -28,6 +28,8 @@ MOD_SHIFT = 0x0004
 MOD_WIN = 0x0008
 MOD_NOREPEAT = 0x4000
 
+WM_HOTKEY = 0x0312
+
 _MODIFIERS = {
     "ctrl": MOD_CONTROL,
     "control": MOD_CONTROL,
@@ -61,6 +63,8 @@ def parse_hotkey(combo: str) -> tuple[int, int] | None:
 class Win32Platform:
     def __init__(self) -> None:
         self._hotkey_filter = None
+        self._hotkey_qapp = None
+        self._registered_ids: list[int] = []
 
     def make_dpi_aware(self) -> None:
         """Set per-monitor DPI awareness before constructing QApplication."""
@@ -110,4 +114,77 @@ class Win32Platform:
     def register_global_hotkeys(
         self, qapp, hotkeys: dict[str, str], callback: Callable[[str], None]
     ) -> bool:
-        return False  # Task 28
+        """Register hotkeys which work even while another app has focus.
+
+        ``RegisterHotKey`` sends ``WM_HOTKEY`` to this thread's message queue,
+        so a Qt native event filter is used instead of focus-bound shortcuts.
+        """
+        from PyQt6.QtCore import QAbstractNativeEventFilter
+
+        if qapp is None:
+            logger.warning("Cannot register global hotkeys without a QApplication")
+            return False
+
+        self.unregister_global_hotkeys()
+        user32 = ctypes.windll.user32
+        registered: dict[int, str] = {}
+        next_id = 1
+        for name, combo in hotkeys.items():
+            parsed = parse_hotkey(combo)
+            if parsed is None:
+                logger.warning("Cannot parse hotkey; skipping %s = %r", name, combo)
+                continue
+            modifiers, virtual_key = parsed
+            if user32.RegisterHotKey(None, next_id, modifiers, virtual_key):
+                registered[next_id] = name
+                next_id += 1
+            else:
+                logger.warning(
+                    "Could not register %s (%s); it may be reserved by another program",
+                    name,
+                    combo,
+                )
+
+        if not registered:
+            return False
+
+        class _HotkeyFilter(QAbstractNativeEventFilter):
+            def nativeEventFilter(self, event_type, message):
+                if event_type == b"windows_generic_MSG":
+                    msg = ctypes.wintypes.MSG.from_address(int(message))
+                    if msg.message == WM_HOTKEY and msg.wParam in registered:
+                        try:
+                            callback(registered[msg.wParam])
+                        except Exception:
+                            logger.exception("Global hotkey callback failed")
+                return False, 0
+
+        self._hotkey_filter = _HotkeyFilter()
+        self._hotkey_qapp = qapp
+        self._registered_ids = list(registered)
+        try:
+            qapp.installNativeEventFilter(self._hotkey_filter)
+        except Exception:
+            logger.exception("Could not install the global-hotkey event filter")
+            self.unregister_global_hotkeys()
+            return False
+        return True
+
+    def unregister_global_hotkeys(self) -> None:
+        """Release all hotkeys held by this platform instance."""
+        event_filter = self._hotkey_filter
+        qapp = self._hotkey_qapp
+        if event_filter is not None and qapp is not None:
+            try:
+                qapp.removeNativeEventFilter(event_filter)
+            except Exception:
+                logger.debug("Could not remove global-hotkey event filter", exc_info=True)
+
+        for hotkey_id in self._registered_ids:
+            try:
+                ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
+            except (AttributeError, OSError) as exc:
+                logger.debug("UnregisterHotKey failed: %s", exc)
+        self._registered_ids = []
+        self._hotkey_filter = None
+        self._hotkey_qapp = None

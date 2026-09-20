@@ -24,3 +24,7 @@ class PlatformIntegration(Protocol):
     ) -> bool:
         """Register system-wide hotkeys, if supported."""
         ...
+
+    def unregister_global_hotkeys(self) -> None:
+        """Release any system-wide hotkeys previously registered."""
+        ...
