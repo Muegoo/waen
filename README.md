@@ -4,6 +4,19 @@ waen is a Windows overlay that watches a selected game-text region, reads
 English text with OCR, translates it to Thai, and draws the translation without
 covering the original text.
 
+## Status (2026-09-20)
+
+All 37 planned tasks are implemented and merged (337 tests). Phase 0 passed:
+dialogue-box text reads at >=95% word accuracy with both engines
+([report](docs/phase0-ocr-report.md)). Defaults: Windows OCR + `x3_binary`
+(96.4%, p95 124 ms). Optional: RapidOCR + DirectML (`pip install -e ".[gpu]"`,
+`ocr_engine = "rapid"`, `preprocess = "raw"`) reads stylized speaker names too
+(95.8%, p95 ~300 ms on a GPU). A frozen build works (`build/waen.spec`).
+
+Still to verify by hand with the game running: region selection at 100%/150%
+DPI (Task 15), `--cli` walkthrough (22), overlay checklist (26), 30-minute
+soak and tuning (Phase 4), hotkeys in-game (28), corpus hit rate (37/6b).
+
 ## Requirements and installation
 
 - Windows 10 version 2004 or later, or Windows 11.
