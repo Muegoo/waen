@@ -9,16 +9,26 @@ from concurrent.futures import ThreadPoolExecutor
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from ..capture.factory import create_backend
+from ..debug import DebugDumper
 from ..geometry import Box
 from .core import PipelineCore, apply_masks
 
 logger = logging.getLogger(__name__)
+
+_default_dumper: DebugDumper | None = None
+
+
+def set_default_dumper(dumper: DebugDumper | None) -> None:
+    """Set the dumper used by workers constructed by the GUI application."""
+    global _default_dumper
+    _default_dumper = dumper
 
 
 class PipelineWorker(QThread):
     blocks_translated = pyqtSignal(object)  # list[TranslatedBlock]
     status = pyqtSignal(str)
     failed = pyqtSignal(str)
+    metrics = pyqtSignal(object)  # {"detect_ms": float, "translate_ms": float, "pending": int}
 
     def __init__(
         self,
@@ -26,6 +36,7 @@ class PipelineWorker(QThread):
         region: Box,
         capture_preference: str = "auto",
         poll_interval_ms: int = 250,
+        dumper: DebugDumper | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -36,6 +47,8 @@ class PipelineWorker(QThread):
         self._paused = False
         self._region_dirty = False
         self._masks: list[Box] = []
+        self._dumper = dumper if dumper is not None else _default_dumper
+        self._pending = 0
 
     def set_region(self, region: Box) -> None:
         self._region = region
@@ -84,6 +97,7 @@ class PipelineWorker(QThread):
                     continue
 
                 now_ms = int(time.monotonic() * 1000)
+                started = time.perf_counter()
                 try:
                     masked = apply_masks(frame, self._region, self._masks)
                     blocks = self._core.detect(
@@ -95,16 +109,29 @@ class PipelineWorker(QThread):
                     self.msleep(self._poll_ms)
                     continue
 
+                detect_ms = (time.perf_counter() - started) * 1000.0
+                self.metrics.emit(
+                    {"detect_ms": round(detect_ms, 1), "pending": self._pending}
+                )
+
                 if blocks:
+                    self._pending += len(blocks)
                     self.status.emit(f"translating {len(blocks)}")
-                    executor.submit(self._translate_and_emit, blocks)
+                    executor.submit(
+                        self._translate_and_emit,
+                        blocks,
+                        frame,
+                        list(self._core.last_lines),
+                        detect_ms,
+                    )
                 self.msleep(self._poll_ms)
         finally:
             executor.shutdown(wait=False)
             backend.close()
             self.status.emit("stopped")
 
-    def _translate_and_emit(self, blocks) -> None:
+    def _translate_and_emit(self, blocks, frame, lines, detect_ms) -> None:
+        started = time.perf_counter()
         translated = []
         for block in blocks:
             try:
@@ -114,8 +141,30 @@ class PipelineWorker(QThread):
                 result = None
             if result is not None:
                 translated.append(result)
+        translate_ms = (time.perf_counter() - started) * 1000.0
+        self._pending = max(0, self._pending - len(blocks))
+
+        if self._dumper is not None:
+            self._dumper.dump(
+                frame,
+                lines,
+                blocks,
+                translated,
+                {
+                    "detect_ms": round(detect_ms, 1),
+                    "translate_ms": round(translate_ms, 1),
+                },
+                self._region,
+            )
         if translated:
             self.blocks_translated.emit(translated)
         else:
             self.failed.emit("Translation failed; check the internet connection")
+        self.metrics.emit(
+            {
+                "detect_ms": round(detect_ms, 1),
+                "translate_ms": round(translate_ms, 1),
+                "pending": self._pending,
+            }
+        )
         self.status.emit("watching")
