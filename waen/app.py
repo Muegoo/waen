@@ -25,6 +25,8 @@ from .translate.glossary import Glossary
 from .translate.google import GoogleTranslateBackend
 from .ui.overlay import OverlayWindow, make_qt_measure
 from .ui.region_selector import RegionSelector
+from .ui.main_window import SettingsWindow, format_status
+from .ui.tray import TrayIcon
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,10 @@ class WaenApp:
         self._worker: PipelineWorker | None = None
         self._hidden = False
         self._selector: RegionSelector | None = None
+        self._translator: GoogleTranslateBackend | None = None
+        self._state = "ready"
+        self._metrics: dict | None = None
+        self._reports_confidence = False
 
         screen = QGuiApplication.primaryScreen()
         if screen is None:
@@ -64,6 +70,20 @@ class WaenApp:
                 "Windows could not exclude the overlay from capture; using masks"
             )
 
+        self.settings = SettingsWindow(config)
+        self.settings.config_changed.connect(self._on_config_changed)
+        self.settings.start_requested.connect(self.start)
+        self.settings.stop_requested.connect(self.stop)
+        self.settings.select_region_requested.connect(self.select_region)
+        self.tray = TrayIcon(
+            lambda: self._on_hotkey("toggle"),
+            lambda: self._on_hotkey("select_region"),
+            self.settings.show,
+            QApplication.quit,
+        )
+        self.tray.show()
+        self._refresh_status()
+
     def start(self) -> None:
         region = self.config.region_box()
         if region is None:
@@ -72,14 +92,17 @@ class WaenApp:
         if self._worker is not None:
             return
 
+        engine = create_engine(self.config.ocr_engine)
+        self._reports_confidence = engine.reports_confidence
+        self._translator = GoogleTranslateBackend(
+            self.config.source_lang, self.config.target_lang
+        )
         core = PipelineCore(
-            ocr=create_engine(self.config.ocr_engine),
+            ocr=engine,
             config=self.config,
             glossary=Glossary.from_file(self.config.glossary_path),
             preprocess_name=self.config.preprocess,
-            translator=GoogleTranslateBackend(
-                self.config.source_lang, self.config.target_lang
-            ),
+            translator=self._translator,
         )
         worker = PipelineWorker(
             core=core,
@@ -88,7 +111,10 @@ class WaenApp:
             poll_interval_ms=self.config.poll_interval_ms,
         )
         worker.blocks_translated.connect(self._on_blocks)
-        worker.status.connect(lambda text: logger.info("status: %s", text))
+        worker.status.connect(self._on_worker_status)
+        metrics_signal = getattr(worker, "metrics", None)
+        if metrics_signal is not None:
+            metrics_signal.connect(self._on_worker_metrics)
         worker.failed.connect(lambda text: logger.warning("problem: %s", text))
         worker.start()
         self._worker = worker
@@ -98,6 +124,8 @@ class WaenApp:
             self._worker.stop()
             self._worker = None
         self.overlay.clear()
+        self._state = "stopped"
+        self._refresh_status()
 
     def toggle_hidden(self) -> None:
         self._hidden = not self._hidden
@@ -122,6 +150,37 @@ class WaenApp:
         selector.selected.connect(on_selected)
         selector.showFullScreen()
         self._selector = selector  # Keep it alive while the user is selecting.
+
+    def _on_config_changed(self, config: AppConfig) -> None:
+        was_running = self._worker is not None
+        if was_running:
+            self.stop()
+        self.config = config
+        save_config(config)
+        if was_running:
+            self.start()
+
+    def _on_worker_status(self, state: str) -> None:
+        logger.info("status: %s", state)
+        self._state = state
+        self._refresh_status()
+
+    def _on_worker_metrics(self, metrics: dict) -> None:
+        self._metrics = metrics
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        stats = self._translator.stats() if self._translator is not None else {}
+        self.settings.set_status(
+            format_status(self._state, stats, self._reports_confidence, self._metrics)
+        )
+
+    def _on_hotkey(self, action: str) -> None:
+        """Dispatch tray actions; Task 28 will connect registered hotkeys here."""
+        if action == "toggle":
+            self.stop() if self._worker is not None else self.start()
+        elif action == "select_region":
+            self.select_region()
 
     def _on_blocks(self, translated) -> None:
         items = layout_blocks(
