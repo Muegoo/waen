@@ -55,3 +55,20 @@
 
 `dialogue` 13 (ใช้ 12 หลังตัด `_03`) · `choice` 3 · `menu` 1 · `mutter` 4 · `fight` 1 · `tutorial` 2 —
 ยังขาดตามแผน: `menu` อีก 3, `item` 4, `skew` 3 (`tests/test_fixtures.py` ของ Task 8 จึงยังไม่เพิ่ม)
+
+## DirectML (2026-09-20)
+
+RapidOCR 1.4.4 was configured with `det_use_dml`, `cls_use_dml`, and `rec_use_dml`.
+`onnxruntime` reported `DmlExecutionProvider` first for all three sessions, with
+`CPUExecutionProvider` available as fallback. The sandbox initialized DirectML without
+falling back to CPU.
+
+Command: `.venv\Scripts\python -m scripts.ocr_bakeoff --fixtures tests/fixtures/p5_region --out .pytest-tmp/bakeoff-dml.md`
+
+| rapid dialogue pipeline | word accuracy before → after | p95 latency before → after |
+|---|---|---|
+| raw | 95.8% → 95.8% | 1,416 ms → 302 ms |
+| x2 | 97.2% → 97.2% | 1,545 ms → 1,561 ms |
+
+The raw-input result is substantially faster; x2 did not improve in this run and remains
+above the 400 ms latency target.
