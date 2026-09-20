@@ -26,6 +26,21 @@ class DxgiCapture:
     @classmethod
     def is_available(cls) -> bool:
         """Whether bettercam can initialise DXGI Desktop Duplication here."""
+        if getattr(sys, "frozen", False):
+            # A PyInstaller executable cannot invoke itself with ``-c``. Probe
+            # in-process instead; any bettercam cleanup noise is harmless here.
+            try:
+                import bettercam
+
+                camera = bettercam.create(output_idx=0, output_color="BGR")
+                if camera is None:
+                    return False
+                camera.release()
+                return True
+            except Exception as exc:
+                logger.info("bettercam unavailable: %s", exc)
+                return False
+
         try:
             result = subprocess.run(
                 [

@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+build = ["pyinstaller>=6.0"]
 
 [project.gui-scripts]
 waen = "waen.app:main"
