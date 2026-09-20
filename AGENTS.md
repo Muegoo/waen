@@ -31,6 +31,8 @@ assigns you **one task at a time** from the implementation plan and reviews your
   segfaults the process. `waen/ocr/__init__.py` already preloads onnxruntime — keep
   that, and never import `winrt` from a module outside `waen.ocr` without importing
   `waen.ocr` first.
+- `onnxruntime-directml` replaces `onnxruntime` under the same import name, so the
+  same winrt import-order rule still applies when DirectML is installed.
 - Windows OCR language packs available: `en-US`, `en-GB`. RapidOCR models are
   downloaded already.
 - Qt tests: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`; use the `qt_app`

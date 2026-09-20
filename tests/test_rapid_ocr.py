@@ -1,3 +1,6 @@
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -13,6 +16,51 @@ def test_declares_that_it_reports_confidence():
 
 def test_is_available_never_raises():
     assert isinstance(RapidOcrEngine.is_available(), bool)
+
+
+def test_providers_enable_directml_for_all_rapidocr_models(monkeypatch):
+    calls = []
+
+    class FakeRapidOCR:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setitem(
+        sys.modules, "rapidocr_onnxruntime", types.SimpleNamespace(RapidOCR=FakeRapidOCR)
+    )
+
+    RapidOcrEngine(providers=["DmlExecutionProvider", "CPUExecutionProvider"])._ensure_engine()
+
+    assert calls == [
+        {
+            "det_use_dml": True,
+            "cls_use_dml": True,
+            "rec_use_dml": True,
+            "det_use_cuda": False,
+            "cls_use_cuda": False,
+            "rec_use_cuda": False,
+        }
+    ]
+
+
+def test_directml_initialisation_falls_back_to_cpu(monkeypatch):
+    calls = []
+
+    class FakeRapidOCR:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+            if kwargs["det_use_dml"]:
+                raise RuntimeError("DirectML adapter unavailable")
+
+    monkeypatch.setitem(
+        sys.modules, "rapidocr_onnxruntime", types.SimpleNamespace(RapidOCR=FakeRapidOCR)
+    )
+
+    engine = RapidOcrEngine(providers=["DmlExecutionProvider", "CPUExecutionProvider"])
+    engine._ensure_engine()
+
+    assert [call["det_use_dml"] for call in calls] == [True, False]
+    assert engine.active_providers == ("CPUExecutionProvider",)
 
 
 def test_reads_plain_rendered_text(qt_app):
