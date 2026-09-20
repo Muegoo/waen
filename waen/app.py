@@ -23,6 +23,7 @@ from .pipeline.worker import PipelineWorker
 from .platform import get_platform
 from .translate.glossary import Glossary
 from .translate.google import GoogleTranslateBackend
+from .translate.lookup import load_corpus
 from .ui.overlay import OverlayWindow, make_qt_measure
 from .ui.region_selector import RegionSelector
 from .ui.main_window import SettingsWindow, format_status
@@ -39,6 +40,7 @@ class WaenApp:
         self._hidden = False
         self._selector: RegionSelector | None = None
         self._translator: GoogleTranslateBackend | None = None
+        self._corpus = None
         self._state = "ready"
         self._metrics: dict | None = None
         self._reports_confidence = False
@@ -104,12 +106,16 @@ class WaenApp:
         self._translator = GoogleTranslateBackend(
             self.config.source_lang, self.config.target_lang
         )
+        self._corpus = load_corpus(
+            self.config.corpus_path, self.config.corpus_threshold
+        )
         core = PipelineCore(
             ocr=engine,
             config=self.config,
             glossary=Glossary.from_file(self.config.glossary_path),
             preprocess_name=self.config.preprocess,
             translator=self._translator,
+            corpus=self._corpus,
         )
         worker = PipelineWorker(
             core=core,
@@ -178,9 +184,14 @@ class WaenApp:
 
     def _refresh_status(self) -> None:
         stats = self._translator.stats() if self._translator is not None else {}
-        self.settings.set_status(
-            format_status(self._state, stats, self._reports_confidence, self._metrics)
-        )
+        status = format_status(self._state, stats, self._reports_confidence, self._metrics)
+        if self._corpus is not None:
+            corpus_stats = self._corpus.stats()
+            status += (
+                f" · corpus {corpus_stats['hits']} hit/"
+                f"{corpus_stats['misses']} miss"
+            )
+        self.settings.set_status(status)
 
     def _on_hotkey(self, action: str) -> None:
         """Dispatch global-hotkey and tray actions."""

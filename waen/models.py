@@ -49,3 +49,6 @@ class TranslatedBlock:
     block: TextBlock
     translated: str
     glossary_applied: bool
+    corpus_hit: bool = False
+    corpus_score: int = 0
+    corpus_entry_id: str | None = None

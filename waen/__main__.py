@@ -23,6 +23,7 @@ def _run_cli(
     from .platform import get_platform
     from .translate.glossary import Glossary
     from .translate.google import GoogleTranslateBackend
+    from .translate.lookup import load_corpus
 
     if max_frames is not None and max_frames < 0:
         print("--max-frames must be zero or greater.")
@@ -50,6 +51,7 @@ def _run_cli(
         glossary=Glossary.from_file(config.glossary_path),
         preprocess_name=config.preprocess,
         translator=GoogleTranslateBackend(config.source_lang, config.target_lang),
+        corpus=load_corpus(config.corpus_path, config.corpus_threshold),
     )
     backend = create_backend(config.capture_backend)
     print(
@@ -76,8 +78,13 @@ def _run_cli(
                         print("  -> translation failed")
                     else:
                         translated.append(result)
+                        origin = (
+                            f"  [corpus {result.corpus_score}]"
+                            if result.corpus_hit
+                            else ""
+                        )
                         flag = "" if result.glossary_applied else "  (glossary not applied)"
-                        print(f"  -> {result.translated}{flag}")
+                        print(f"  -> {result.translated}{origin}{flag}")
                 if dumper is not None and blocks:
                     dumper.dump(
                         frame,

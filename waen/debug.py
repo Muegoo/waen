@@ -126,6 +126,10 @@ class DebugDumper:
                         "source_text": entry.block.source_text,
                         "translated": entry.translated,
                         "glossary_applied": entry.glossary_applied,
+                        "kind": entry.block.kind,
+                        "corpus_hit": entry.corpus_hit,
+                        "corpus_score": entry.corpus_score,
+                        "corpus_entry_id": entry.corpus_entry_id,
                     }
                     for entry in translated
                 ],

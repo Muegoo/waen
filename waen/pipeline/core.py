@@ -97,6 +97,7 @@ class PipelineCore:
         preprocess_name: str = "raw",
         max_thai_ratio: float = MAX_THAI_RATIO,
         templates=DEFAULT_TEMPLATES,
+        corpus=None,
     ) -> None:
         self.ocr = ocr
         self.config = config
@@ -105,6 +106,7 @@ class PipelineCore:
         self.preprocess_name = preprocess_name
         self.max_thai_ratio = max_thai_ratio
         self.templates = templates
+        self.corpus = corpus
         self.last_lines: list[TextLine] = []
         self._differ = FrameDiffer(threshold=config.diff_threshold)
         self._stabilizer = Stabilizer(
@@ -152,6 +154,17 @@ class PipelineCore:
 
     def translate(self, block: TextBlock) -> TranslatedBlock | None:
         """Translate one stable block; callers should run this off the capture thread."""
+        if self.corpus is not None:
+            hit = self.corpus.lookup(block.source_text)
+            if hit is not None:
+                return TranslatedBlock(
+                    block=block,
+                    translated=hit.translated,
+                    glossary_applied=True,
+                    corpus_hit=True,
+                    corpus_score=hit.score,
+                    corpus_entry_id=hit.entry_id,
+                )
         translated, applied = translate_with_glossary(
             block.source_text, self.translator, self.glossary, self.templates
         )

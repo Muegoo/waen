@@ -78,6 +78,8 @@ class AppConfig:
     grouping: GroupingConfig = field(default_factory=GroupingConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     glossary_path: str = "glossary/persona5.json"
+    corpus_path: str | None = None
+    corpus_threshold: int = 85
     placeholder_template: str = "@@{i}@@"  # ผลวัด docs/phase2-placeholder-notes.md
     hotkeys: dict[str, str] = field(default_factory=_default_hotkeys)
 
@@ -148,6 +150,9 @@ def load_config(path: Path | None = None) -> AppConfig:
             config.overlay = _load_section(raw[item.name], OverlayConfig)
         elif item.name == "region":
             config.region = raw[item.name] if isinstance(raw[item.name], dict) else None
+        elif item.name == "corpus_path":
+            value = raw[item.name]
+            config.corpus_path = value if isinstance(value, str) and value else None
         else:
             setattr(config, item.name, _coerce(raw[item.name], getattr(config, item.name)))
     return config
