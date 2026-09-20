@@ -4,6 +4,9 @@ __pycache__/
 venv/
 .pytest_cache/
 build/
+!build/
+build/*
+!build/waen.spec
 dist/
 *.spec.bak
 .DS_Store

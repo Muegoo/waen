@@ -20,8 +20,10 @@ def create_engine(preference: str = "auto") -> OcrEngine:
         )
 
     if preference == "windows":
+        logger.info("OCR engine: windows")
         return WindowsOcrEngine()
     if preference == "rapid":
+        logger.info("OCR engine: rapid")
         return RapidOcrEngine()
 
     if WindowsOcrEngine.is_available():
