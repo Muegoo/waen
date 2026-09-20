@@ -44,6 +44,7 @@ def _run_cli(region_arg: str | None, max_frames: int | None = None) -> int:
         ocr=ocr,
         config=config,
         glossary=Glossary.from_file(config.glossary_path),
+        preprocess_name=config.preprocess,
         translator=GoogleTranslateBackend(config.source_lang, config.target_lang),
     )
     backend = create_backend(config.capture_backend)

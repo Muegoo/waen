@@ -76,6 +76,7 @@ class WaenApp:
             ocr=create_engine(self.config.ocr_engine),
             config=self.config,
             glossary=Glossary.from_file(self.config.glossary_path),
+            preprocess_name=self.config.preprocess,
             translator=GoogleTranslateBackend(
                 self.config.source_lang, self.config.target_lang
             ),

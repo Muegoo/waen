@@ -66,8 +66,10 @@ class AppConfig:
     region_scale: float = 1.0
     source_lang: str = "en"
     target_lang: str = "th"
-    # Keep automatic selection until the Phase 0 report identifies a clear winner.
-    ocr_engine: str = "auto"
+    # ผล Phase 0 (docs/phase0-ocr-report.md): windows + x3_binary = บทพูด 96.4% @124 ms
+    # rapid แม่นกว่าเล็กน้อยรวมชื่อผู้พูด แต่ 1.5 s/เฟรมบน CPU — เลือกได้ใน config
+    ocr_engine: str = "windows"
+    preprocess: str = "x3_binary"  # raw | x2 | x3_binary | invert_x2
     capture_backend: str = "auto"
     poll_interval_ms: int = 250
     diff_threshold: float = 4.0
