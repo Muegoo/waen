@@ -1,0 +1,14 @@
+Comparing power levels...
+No threat. Get ’em, Joker!
+Sacrificial Pyrekeeper
+PERSONA
+Use a Skill
+GUN
+Take Aim
+ITEM
+Use an Item
+GUARD
+Defend Yourself
+ATTACK
+Use Melee Weapon
+Rush

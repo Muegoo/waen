@@ -67,3 +67,11 @@ def test_character_error_rate_one_of_five():
 
 def test_character_error_rate_can_exceed_one_when_ocr_hallucinates():
     assert character_error_rate("hi", "hi there my friend") > 1.0
+
+
+def test_normalize_unifies_typographic_quotes_and_dashes():
+    assert normalize("couldn’t — “ok”…") == normalize("couldn't - \"ok\"...")
+
+
+def test_word_accuracy_ignores_typographic_differences():
+    assert word_accuracy("It’s me—the king.", "It's me-the king.") == 1.0

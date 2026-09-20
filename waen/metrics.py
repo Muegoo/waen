@@ -11,6 +11,15 @@ from typing import Sequence
 
 _WHITESPACE = re.compile(r"\s+")
 
+# เครื่องหมายแบบพิมพ์สวย (typographic) ที่ OCR มักคืนเป็นแบบธรรมดา — ต่างกันแค่รูป
+# ไม่ต่างความหมาย ถ้าไม่รวมเป็นตัวเดียวกัน คำทั้งคำเช่น couldn’t จะถูกนับว่าผิด
+_TYPOGRAPHY = str.maketrans({
+    "‘": "'", "’": "'", "‚": "'", "′": "'",
+    "“": '"', "”": '"', "„": '"',
+    "–": "-", "—": "-", "―": "-", "−": "-",
+    "…": "...",
+})
+
 
 def normalize(text: str) -> str:
     """ทำให้เทียบกันได้ยุติธรรม: ยุบช่องว่าง ตัดหัวท้าย ไม่สนตัวพิมพ์
@@ -18,7 +27,7 @@ def normalize(text: str) -> str:
     เจตนา *ไม่* ตัดเครื่องหมายวรรคตอนออก เพราะจุลภาคกับเครื่องหมายคำถาม
     เปลี่ยนความหมายของประโยคที่จะถูกส่งไปแปล
     """
-    return _WHITESPACE.sub(" ", text).strip().casefold()
+    return _WHITESPACE.sub(" ", text.translate(_TYPOGRAPHY)).strip().casefold()
 
 
 def levenshtein(a: Sequence, b: Sequence) -> int:
