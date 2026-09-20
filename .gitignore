@@ -7,6 +7,7 @@ build/
 !build/
 build/*
 !build/waen.spec
+!build/launcher.py
 dist/
 *.spec.bak
 .DS_Store
