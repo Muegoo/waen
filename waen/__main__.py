@@ -8,7 +8,11 @@ import sys
 from .geometry import Box
 
 
-def _run_cli(region_arg: str | None, max_frames: int | None = None) -> int:
+def _run_cli(
+    region_arg: str | None,
+    max_frames: int | None = None,
+    dumper=None,
+) -> int:
     """Capture, translate, and print text without constructing an overlay UI."""
     import time
 
@@ -59,14 +63,35 @@ def _run_cli(region_arg: str | None, max_frames: int | None = None) -> int:
             frame = backend.grab(region)
             if frame is not None:
                 now_ms = int(time.monotonic() * 1000)
-                for block in core.detect(frame, (region.x, region.y), now_ms):
+                started = time.perf_counter()
+                blocks = core.detect(frame, (region.x, region.y), now_ms)
+                detect_ms = (time.perf_counter() - started) * 1000.0
+                lines = list(core.last_lines)
+                started = time.perf_counter()
+                translated = []
+                for block in blocks:
                     result = core.translate(block)
                     print(f"\n[{block.kind}] {block.source_text}")
                     if result is None:
                         print("  -> translation failed")
                     else:
+                        translated.append(result)
                         flag = "" if result.glossary_applied else "  (glossary not applied)"
                         print(f"  -> {result.translated}{flag}")
+                if dumper is not None and blocks:
+                    dumper.dump(
+                        frame,
+                        lines,
+                        blocks,
+                        translated,
+                        {
+                            "detect_ms": round(detect_ms, 1),
+                            "translate_ms": round(
+                                (time.perf_counter() - started) * 1000.0, 1
+                            ),
+                        },
+                        region,
+                    )
                 frames_seen += 1
             time.sleep(config.poll_interval_ms / 1000)
     except KeyboardInterrupt:
@@ -185,16 +210,28 @@ def main() -> int:
         type=int,
         help="exit CLI mode after this many non-empty captured frames",
     )
+    parser.add_argument(
+        "--debug-dump",
+        metavar="DIR",
+        help="write a bounded ring of frame, box, and pipeline debug snapshots",
+    )
     args = parser.parse_args()
 
+    dumper = None
+    if args.debug_dump:
+        from .debug import DebugDumper
+
+        dumper = DebugDumper(args.debug_dump)
+
     if args.cli:
-        return _run_cli(args.region, args.max_frames)
+        return _run_cli(args.region, args.max_frames, dumper)
 
     if args.save_region:
         return _save_region(args.save_region)
 
     from .app import main as run_app
     from .config import load_config
+    from .pipeline.worker import set_default_dumper
 
     config = load_config()
     if args.region:
@@ -204,6 +241,7 @@ def main() -> int:
         except ValueError:
             print("--region must be x,y,w,h using integer physical pixels.")
             return 2
+    set_default_dumper(dumper)
     return run_app(config=config, max_frames=args.max_frames)
 
 

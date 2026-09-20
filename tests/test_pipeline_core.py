@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from waen.config import AppConfig
 from waen.geometry import Box
@@ -105,6 +106,29 @@ def test_thai_lines_are_dropped_because_they_can_only_be_our_own_overlay():
     core.detect(frame(), origin=(0, 0), now_ms=100)
     blocks = core.detect(frame(), origin=(0, 0), now_ms=300)
     assert [b.source_text for b in blocks] == ["Welcome home."]
+
+
+@pytest.mark.parametrize("text", ["A", "1/2", "Hi 1 2 3", "SNNN"])
+def test_detect_drops_clearly_non_english_ocr_garbage(text):
+    core = make_core([[line(text, 10, 10)]])
+    core.detect(frame(), origin=(0, 0), now_ms=0)
+    assert core.last_lines == []
+
+
+@pytest.mark.parametrize(
+    "text", ["I-Is there...", "*cough* Nngh!", "......", "Hm...?", "SNN"]
+)
+def test_detect_keeps_short_or_punctuated_dialogue(text):
+    core = make_core([[line(text, 10, 10)]])
+    core.detect(frame(), origin=(0, 0), now_ms=0)
+    assert [found.text for found in core.last_lines] == [text]
+
+
+def test_detect_logs_dropped_garbage_at_debug_level(caplog):
+    core = make_core([[line("Hi 1 2 3", 10, 10)]])
+    with caplog.at_level("DEBUG", logger="waen.pipeline.core"):
+        core.detect(frame(), origin=(0, 0), now_ms=0)
+    assert "Dropping garbage OCR line: 'Hi 1 2 3'" in caplog.messages
 
 
 def test_two_close_lines_arrive_as_one_paragraph():
