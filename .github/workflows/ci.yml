@@ -1,0 +1,25 @@
+name: Core tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Deterministic processing and storage tests
+        run: >-
+          python -m pytest -q
+          tests/test_geometry.py tests/test_models.py tests/test_config.py
+          tests/test_framediff.py tests/test_grouping.py tests/test_stabilize.py
+          tests/test_layout.py tests/test_pipeline_core.py tests/test_masking.py
+          tests/test_glossary.py tests/test_corpus_formats.py tests/test_corpus_extract.py
+          tests/test_corpus_lookup.py tests/test_corpus_translate.py
+          tests/test_corpus_normalize.py tests/test_corpus_wiring.py tests/test_corpus_hitrate.py

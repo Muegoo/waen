@@ -1,0 +1,30 @@
+name: Windows package
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: New version tag (for example v0.1.0)
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[build]"
+      - run: python -m PyInstaller build/waen.spec --clean --noconfirm
+      - name: Verify package starts
+        run: .\dist\waen\waen.exe --help
+      - name: Archive and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+([-.][A-Za-z0-9.-]+)?$') { throw 'Use a semantic version tag starting with v' }
+          Compress-Archive -Path dist/waen -DestinationPath waen-windows-x64.zip
+          gh release create $env:RELEASE_TAG waen-windows-x64.zip --target $env:GITHUB_SHA --title "waen $env:RELEASE_TAG" --notes "Windows x64 onedir package. Extract the whole archive and run waen/waen.exe. Startup help was checked by the build job; live-game capture, hotkeys and clean-machine installation remain manual checks."
